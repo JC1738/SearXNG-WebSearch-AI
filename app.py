@@ -1,76 +1,48 @@
-import requests
-import gradio as gr
 import logging
+import os
+import io
+import re
+import sys
+import json
+import math
+import traceback
+import requests
+import certifi
+import numpy as np
+from typing import List, Dict, Any, Tuple
+from collections import Counter
 from urllib.parse import urlparse
+from abc import ABC, abstractmethod
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from requests.exceptions import Timeout
-from urllib.request import urlopen, Request
-import json
-from huggingface_hub import InferenceClient
-import random
-import time
-from sentence_transformers import SentenceTransformer, util
-import torch
-from datetime import datetime
-import os
-from dotenv import load_dotenv
-import certifi
-import requests
 from newspaper import Article
 import PyPDF2
-import io
-import requests
-import random
-import datetime
+import gradio as gr
+from sentence_transformers import SentenceTransformer, util
+from huggingface_hub import InferenceClient
 from groq import Groq
-import os
 from mistralai import Mistral
 from dotenv import load_dotenv
-import re
-from typing import List, Tuple
-from rank_bm25 import BM25Okapi
-from typing import List, Dict
-import numpy as np
-from math import log
-from collections import Counter
-import numpy as np
-from typing import List, Dict, Tuple
-import datetime
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any
-import math
-from typing import List, Dict
-import numpy as np
-from collections import Counter
-import sys
-import traceback
 
-# Automatically get the current year
-CURRENT_YEAR = datetime.datetime.now().year
-
-# Load environment variables from a .env file
-load_dotenv()
+from src.web.interface import create_interface
+from src.config.settings import (
+    CUSTOM_LLM,
+    CUSTOM_LLM_DEFAULT_MODEL,
+    SEARXNG_URL,
+    CURRENT_YEAR
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# SearXNG instance details
-SEARXNG_URL = os.getenv("SEARXNG_URL")
-SEARXNG_KEY = os.getenv("SEARXNG_KEY")
+def main():
+    logger.info("Starting the SearXNG Scraper for News")
+    iface = create_interface()
+    iface.launch(server_name="0.0.0.0", server_port=7860, share=False)
 
-
-logger.info(f"SearXNG URL: {SEARXNG_URL}")
-logger.info(f"SearXNG Key: {SEARXNG_KEY}") 
-
-
-# ... other environment variables ...
-CUSTOM_LLM = os.getenv("CUSTOM_LLM")
-CUSTOM_LLM_DEFAULT_MODEL = os.getenv("CUSTOM_LLM_DEFAULT_MODEL")
-
-logger.info(f"CUSTOM_LLM: {CUSTOM_LLM}")
-logger.info(f"CUSTOM_LLM_DEFAULT_MODEL: {CUSTOM_LLM_DEFAULT_MODEL}")
+if __name__ == "__main__":
+    main()
 
 # Define the fetch_custom_models function here
 def fetch_custom_models():
@@ -729,6 +701,10 @@ Instructions:
         logger.error(f"Error in LLM summarization: {e}")
         return "Error: Unable to generate a summary. Please try again."
 
+from src.services.search_service import SearchService
+
+search_service = SearchService()
+
 def search_and_scrape(
     query: str,
     chat_history: str,
@@ -746,6 +722,20 @@ def search_and_scrape(
     model: str = "huggingface",
     use_pydf2: bool = True
 ):
+    return search_service.search_and_process(
+        query=query,
+        chat_history=chat_history,
+        ai_model=ai_model,
+        num_results=num_results,
+        max_chars=max_chars,
+        time_range=time_range,
+        language=language,
+        category=category,
+        engines=engines,
+        safesearch=safesearch,
+        method=method,
+        llm_temperature=llm_temperature
+    )
     try:
         # Step 1: Rephrase the Query
         rephrased_query = rephrase_query(chat_history, query, temperature=llm_temperature)
