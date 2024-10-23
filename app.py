@@ -39,6 +39,12 @@ from typing import List, Dict, Tuple
 import datetime
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
+import math
+from typing import List, Dict
+import numpy as np
+from collections import Counter
+import sys
+import traceback
 
 # Automatically get the current year
 CURRENT_YEAR = datetime.datetime.now().year
@@ -454,76 +460,74 @@ def extract_entity_domain(query):
     return matches[0] if matches else None
 
 class BM25:
-    def __init__(self, k1: float = 1.5, b: float = 0.75):
-        self.k1 = k1  # term frequency saturation parameter
-        self.b = b    # length normalization parameter
-        self.corpus_size = 0
-        self.doc_lengths = []
+    def __init__(self, corpus: List[str], tokenizer=None, k1=1.5, b=0.75):
+        self.corpus_size = len(corpus)
         self.avgdl = 0
         self.doc_freqs = []
         self.idf = {}
-        self.doc_vectors = []
+        self.doc_len = []
+        self.tokenizer = tokenizer
+        self.k1 = k1
+        self.b = b
+
+        if tokenizer:
+            corpus = self._tokenize_corpus(corpus)
+
+        nd = self._initialize(corpus)
+        self._calc_idf(nd)
+
+    def _tokenize_corpus(self, corpus: List[str]) -> List[List[str]]:
+        return [self.tokenizer(doc) for doc in corpus]
+
+    def _initialize(self, corpus: List[List[str]]) -> Dict[str, int]:
+        nd = {}  # word -> number of documents with word
+        num_doc = 0
+        for document in corpus:
+            self.doc_len.append(len(document))
+            num_doc += len(document)
+
+            frequencies = Counter(document)
+            self.doc_freqs.append(frequencies)
+
+            for word, freq in frequencies.items():
+                nd[word] = nd.get(word, 0) + 1
+
+        self.avgdl = num_doc / self.corpus_size
+        return nd
+
+    def _calc_idf(self, nd: Dict[str, int]) -> None:
+        for word, freq in nd.items():
+            idf = math.log((self.corpus_size - freq + 0.5) / (freq + 0.5))
+            self.idf[word] = idf
+
+    def get_scores(self, query: List[str]) -> List[float]:
+        scores = [0] * self.corpus_size
+        query_freqs = Counter(query)
         
-    def fit(self, corpus: List[str]):
-        """
-        Fit BM25 parameters to the corpus
-        
-        Args:
-            corpus: List of document strings
-        """
-        self.corpus_size = len(corpus)
-        
-        # Calculate document lengths and average document length
-        self.doc_lengths = []
-        for doc in corpus:
-            words = doc.lower().split()
-            self.doc_lengths.append(len(words))
-        self.avgdl = sum(self.doc_lengths) / self.corpus_size
-        
-        # Calculate document frequencies
-        df = Counter()
-        self.doc_vectors = []
-        
-        for doc in corpus:
-            words = doc.lower().split()
-            doc_words = set(words)
-            for word in doc_words:
-                df[word] += 1
-            self.doc_vectors.append(Counter(words))
-        
-        # Calculate inverse document frequency
-        self.idf = {}
-        for word, freq in df.items():
-            self.idf[word] = log((self.corpus_size - freq + 0.5) / (freq + 0.5))
-    
-    def get_scores(self, query: str) -> np.ndarray:
-        """
-        Calculate BM25 scores for the query against all documents
-        
-        Args:
-            query: Query string
-            
-        Returns:
-            numpy array of scores for each document
-        """
-        scores = np.zeros(self.corpus_size)
-        query_words = query.lower().split()
-        
-        for word in query_words:
+        for word, freq in query_freqs.items():
             if word not in self.idf:
                 continue
-                
-            qi = self.idf[word]
-            for idx, doc_vector in enumerate(self.doc_vectors):
-                if word not in doc_vector:
+            
+            idf = self.idf[word]
+            for doc_id, doc_freq in enumerate(self.doc_freqs):
+                if word not in doc_freq:
                     continue
-                    
-                score = (qi * doc_vector[word] * (self.k1 + 1) /
-                        (doc_vector[word] + self.k1 * (1 - self.b + self.b * 
-                         self.doc_lengths[idx] / self.avgdl)))
-                scores[idx] += score
                 
+                score = (idf * doc_freq[word] * (self.k1 + 1) /
+                         (doc_freq[word] + self.k1 * (1 - self.b + self.b * self.doc_len[doc_id] / self.avgdl)))
+                scores[doc_id] += score
+        
         return scores
+
+    def get_top_n(self, query: str, documents: List[str], n: int = 5) -> List[str]:
+        assert self.corpus_size == len(documents), "The documents given don't match the index corpus!"
+
+        if self.tokenizer:
+            query = self.tokenizer(query)
+
+        scores = self.get_scores(query)
+        top_n = np.argsort(scores)[::-1][:n]
+        return [documents[i] for i in top_n]
 
 def prepare_documents_for_bm25(documents: List[Dict]) -> Tuple[List[str], List[Dict]]:
     """
@@ -543,74 +547,41 @@ def prepare_documents_for_bm25(documents: List[Dict]) -> Tuple[List[str], List[D
     return doc_texts, documents
 
 # Now modify the rerank_documents_with_priority function to include BM25 ranking
-def rerank_documents_with_priority(query: str, documents: List[Dict], entity_domain: str, 
-                                 similarity_threshold: float = 0.95, max_results: int = 5) -> List[Dict]:
-    try:
-        if not documents:
-            logger.warning("No documents to rerank.")
-            return documents
-            
-        # Step 1: Prepare documents for BM25
-        doc_texts, original_docs = prepare_documents_for_bm25(documents)
-        
-        # Step 2: Initialize and fit BM25
-        bm25 = BM25()
-        bm25.fit(doc_texts)
-        
-        # Step 3: Get BM25 scores
-        bm25_scores = bm25.get_scores(query)
-        
-        # Step 4: Get semantic similarity scores
-        query_embedding = similarity_model.encode(query, convert_to_tensor=True)
-        doc_summaries = [doc['summary'] for doc in documents]
-        doc_embeddings = similarity_model.encode(doc_summaries, convert_to_tensor=True)
-        semantic_scores = util.cos_sim(query_embedding, doc_embeddings)[0]
-        
-        # Step 5: Combine scores (normalize first)
-        bm25_scores_norm = (bm25_scores - np.min(bm25_scores)) / (np.max(bm25_scores) - np.min(bm25_scores))
-        semantic_scores_norm = (semantic_scores - torch.min(semantic_scores)) / (torch.max(semantic_scores) - torch.min(semantic_scores))
-        
-        # Combine scores with weights (0.4 for BM25, 0.6 for semantic similarity)
-        combined_scores = 0.4 * bm25_scores_norm + 0.6 * semantic_scores_norm.numpy()
-        
-        # Create scored documents with combined scores
-        scored_documents = list(zip(documents, combined_scores))
-        
-        # Sort by domain priority and combined score
-        scored_documents.sort(key=lambda x: (not x[0]['is_entity_domain'], -x[1]), reverse=False)
-        
-        # Filter similar documents
-        filtered_docs = []
-        added_contents = []
-        
-        for doc, score in scored_documents:
-            if score < 0.3:  # Minimum relevance threshold
-                continue
-                
-            # Check similarity with already selected documents
-            doc_embedding = similarity_model.encode(doc['summary'], convert_to_tensor=True)
-            is_similar = False
-            
-            for content in added_contents:
-                content_embedding = similarity_model.encode(content, convert_to_tensor=True)
-                similarity = util.pytorch_cos_sim(doc_embedding, content_embedding)
-                if similarity > similarity_threshold:
-                    is_similar = True
-                    break
-            
-            if not is_similar:
-                filtered_docs.append(doc)
-                added_contents.append(doc['summary'])
-            
-            if len(filtered_docs) >= max_results:
-                break
-        
-        logger.info(f"Reranked and filtered to {len(filtered_docs)} unique documents using BM25 and semantic similarity.")
-        return filtered_docs
-        
-    except Exception as e:
-        logger.error(f"Error during reranking documents: {e}")
-        return documents[:max_results]  # Fallback to first max_results documents if reranking fails
+def rerank_documents_with_priority(query: str, documents: List[Dict], entity_domain: str, similarity_threshold: float = 0.95, max_results: int = 3):
+    logger.debug(f"Reranking {len(documents)} documents")
+    for i, doc in enumerate(documents):
+        logger.debug(f"Document {i}: Keys: {doc.keys()}, Summary length: {len(doc.get('summary', ''))}")
+    
+    # Filter out documents without 'summary' field
+    valid_documents = [doc for doc in documents if 'summary' in doc]
+    
+    if not valid_documents:
+        logger.warning("No valid documents for reranking")
+        return documents[:max_results]  # Return original documents if none are valid
+    
+    # Create embeddings
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    query_embedding = model.encode([query], convert_to_tensor=True)
+    doc_embeddings = model.encode([doc['summary'] for doc in valid_documents], convert_to_tensor=True)
+    
+    # Calculate cosine similarities
+    similarities = util.pytorch_cos_sim(query_embedding, doc_embeddings)[0]
+    
+    # Sort documents by similarity and priority
+    ranked_docs = sorted(
+        zip(valid_documents, similarities),
+        key=lambda x: (x[1], x[0]['is_entity_domain']),
+        reverse=True
+    )
+    
+    # Filter documents based on similarity threshold
+    filtered_docs = [doc for doc, sim in ranked_docs if sim >= similarity_threshold]
+    
+    # If no documents meet the threshold, return the top documents
+    if not filtered_docs:
+        filtered_docs = [doc for doc, _ in ranked_docs[:max_results]]
+    
+    return filtered_docs[:max_results]
 
 def compute_similarity(text1, text2):
     # Encode the texts
@@ -669,6 +640,7 @@ Remember to focus on key aspects and implications in your assessment and summary
             top_p=0.9,
             frequency_penalty=1.4
         )
+        logger.info(f"LLM Response: {response.choices[0].message.content.strip()}")
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Error assessing relevance and summarizing with LLM: {e}")
@@ -821,6 +793,9 @@ def search_and_scrape(
             'Sec-Fetch-Site': 'same-origin',
         }
 
+        logger.info(f"SearXNG Parameters: {params}")
+        logger.info(f"SearXNG Headers: {headers}")
+
         scraped_content = []
         page = 1
         while len(scraped_content) < num_results:
@@ -843,7 +818,7 @@ def search_and_scrape(
                 return f"An error occurred during the search request: {e}"
 
             search_results = response.json()
-            logger.debug(f"SearXNG Response: {search_results}")
+            logger.info(f"SearXNG Response: {search_results}")
 
             results = search_results.get('results', [])
             if not results:
@@ -898,8 +873,16 @@ def search_and_scrape(
         unique_summaries = []
         for doc in scraped_content:
             assessment = assess_relevance_and_summarize(client, rephrased_query, doc, temperature=llm_temperature)
-            relevance, summary = assessment.split('\n', 1)
-
+            
+            # Split the assessment, but handle cases where there's no newline
+            assessment_parts = assessment.split('\n', 1)
+            if len(assessment_parts) == 2:
+                relevance, summary = assessment_parts
+            else:
+                # If there's no newline, assume the entire string is the relevance
+                relevance = assessment_parts[0]
+                summary = ""
+            
             if relevance.strip().lower() == "relevant: yes":
                 summary_text = summary.replace("Summary: ", "").strip()
                 
@@ -930,6 +913,11 @@ def search_and_scrape(
         
         logger.info(f"Reranked and filtered to top {len(reranked_docs)} unique, related documents.")
 
+        # If we have fewer documents than requested, pad with original documents
+        if len(reranked_docs) < num_results:
+            logger.info(f"Padding results with {num_results - len(reranked_docs)} additional documents")
+            reranked_docs.extend(relevant_documents[len(reranked_docs):num_results])
+
         # Step 5: Scrape full content for top documents (up to num_results)
         for doc in reranked_docs[:num_results]:
             full_content = scrape_full_content(doc['url'], max_chars)
@@ -954,7 +942,9 @@ def search_and_scrape(
         return llm_summary
 
     except Exception as e:
-        logger.error(f"Unexpected error in search_and_scrape: {e}")
+        logger.error(f"Unexpected error in search_and_scrape: {str(e)}")
+        logger.error(f"Error occurred at line: {sys.exc_info()[-1].tb_lineno}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return f"An unexpected error occurred during the search and scrape process: {e}"
 
 # Helper function to get the appropriate client for each model
@@ -1045,6 +1035,20 @@ iface = gr.ChatInterface(
 if __name__ == "__main__":
     logger.info("Starting the SearXNG Scraper for News using ChatInterface with Advanced Parameters")
     iface.launch(server_name="0.0.0.0", server_port=7860, share=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
