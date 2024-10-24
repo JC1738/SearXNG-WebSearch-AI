@@ -32,12 +32,13 @@ class SearchService:
         engines: List[str] = None,
         safesearch: int = 2,
         method: str = "GET",
+        site_filter: str = "",
     ) -> List[Dict]:
         if engines is None:
             engines = ['google']
 
         params = {
-            'q': query,
+            'q': f"{query} {f'site:{site_filter}' if site_filter.strip() else ''}",
             'format': 'json',
             'time_range': time_range,
             'language': language,

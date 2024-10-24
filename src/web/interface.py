@@ -57,6 +57,7 @@ def create_interface():
             gr.Slider(0, 1, value=0.2, step=0.1, label="LLM Temperature"),
             gr.Dropdown(all_models, value=default_model, label="LLM Model"),
             gr.Checkbox(label="Use PyPDF2 for PDF scraping", value=True),
+            gr.Textbox(label="Site Filter (e.g. wikipedia.org)", value=""),
         ],
         additional_inputs_accordion=gr.Accordion("⚙️ Advanced Parameters", open=True),
         retry_btn="Retry",

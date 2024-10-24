@@ -66,7 +66,8 @@ class ChatHandler:
         method: str,
         llm_temperature: float,
         model: str,
-        use_pydf2: bool
+        use_pydf2: bool,
+        site_filter: str
     ) -> str:
         chat_history = "\n".join([f"{role}: {msg}" for role, msg in history])
         ai_model = AIModelFactory.create_model(model, get_client_for_model(model))
@@ -93,7 +94,8 @@ class ChatHandler:
                 engines=engines,
                 safesearch=safesearch,
                 method=method,
-                llm_temperature=llm_temperature
+                llm_temperature=llm_temperature,
+                site_filter=site_filter
             )
             
             return response
