@@ -11,6 +11,7 @@ class ChatHandler:
     def __init__(self):
         self.search_service = SearchService()
 
+
     def determine_query_type(self, message: str, chat_history: str, ai_model) -> str:
         if message.strip().lower() in ["hi", "hello", "hey"]:
             return "knowledge_base"
@@ -69,6 +70,9 @@ class ChatHandler:
         use_pydf2: bool,
         site_filter: str
     ) -> str:
+        
+        logger.info(f"Processing chat with message: {message}")
+
         chat_history = "\n".join([f"{role}: {msg}" for role, msg in history])
         ai_model = AIModelFactory.create_model(model, get_client_for_model(model))
         
@@ -95,6 +99,7 @@ class ChatHandler:
                 safesearch=safesearch,
                 method=method,
                 llm_temperature=llm_temperature,
+                use_pydf2=use_pydf2,
                 site_filter=site_filter
             )
             

@@ -76,6 +76,7 @@ def scrape_pdf_content(url, max_chars=3000, timeout=5):
 
 def scrape_with_newspaper(url):
     try:
+        logger.info(f"Scraping with Newspaper3k from: {url}")
         article = Article(url)
         article.download()
         article.parse()

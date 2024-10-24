@@ -38,7 +38,7 @@ class SearchService:
             engines = ['google']
 
         params = {
-            'q': f"{query} {f'site:{site_filter}' if site_filter.strip() else ''}",
+            'q': f"{f'site:{site_filter} ' if site_filter.strip() else ''}{query}",
             'format': 'json',
             'time_range': time_range,
             'language': language,
@@ -126,34 +126,77 @@ class SearchService:
         safesearch: int = 2,
         method: str = "GET",
         llm_temperature: float = 0.2,
+        use_pydf2: bool = True,
+        site_filter: str = "",
     ) -> str:
         try:
-            # Perform search and get results
-            search_results = self.perform_search(
-                query=query,
-                num_results=num_results,
-                time_range=time_range,
-                language=language,
-                category=category,
-                engines=engines,
-                safesearch=safesearch,
-                method=method
-            )
+            all_search_results = []
+            attempts = 0
+            max_attempts = 3
 
-            if not search_results:
-                return "No content could be scraped from the search results."
+            query = self.assessment_service.rephrase_query_simple(ai_model, query, chat_history, llm_temperature)
+
+            while len(all_search_results) < num_results and attempts < max_attempts:
+                logger.info(f"Attempt {attempts + 1} of {max_attempts}")
+                logger.info(f"Query: {query} with site_filter: {site_filter}")
+                # Perform search and get results
+                search_results = self.perform_search(
+                    query=query,
+                    num_results=num_results - len(all_search_results),
+                    time_range=time_range,
+                    language=language,
+                    category=category,
+                    engines=engines,
+                    safesearch=safesearch,
+                    method=method,
+                    site_filter=site_filter
+                )
+
+                if not search_results:
+                    break
+
+                # Assess relevance and summarize search results
+                assessed_results = []
+                for result in search_results:
+                    logger.debug(f"Assessing result: {result}")
+                    assessment = self.assessment_service.assess_relevance_and_summarize(ai_model, query, result, temperature=llm_temperature)
+                    if "Relevant: Yes" in assessment:
+                        # summary = assessment.split("Summary: ", 1)[1].strip()
+                        # result['summary'] = summary
+                        assessed_results.append(result)
+
+                logger.debug(f"Assessed results: {assessed_results}")
+
+                all_search_results.extend(assessed_results)
+                attempts += 1
+
+                if len(all_search_results) < num_results:
+                    # Modify the query for the next attempt
+                    query = self.assessment_service.rephrase_query_simple(ai_model, query, chat_history, llm_temperature)
+
+            if not all_search_results:
+                return "No relevant content could be found for your query."
+
+            # Rank the assessed results
+            ranked_results = self.ranking_service.rerank_documents(query, all_search_results)
+
+
+            # Limit to the top num_results
+            all_search_results = ranked_results[:num_results]
 
             # Prepare JSON for LLM
             llm_input = {
                 "query": query,
-                "documents": search_results
+                "documents": all_search_results
             }
 
             # Generate response using AI model
             messages = [
-                {"role": "system", "content": "You are a helpful AI assistant. Please provide a comprehensive summary of the search results."},
+                {"role": "system", "content": "You are a helpful AI assistant. Please provide a comprehensive summary of the search results. Include the source of the content, url and title in the summary."},
                 {"role": "user", "content": json.dumps(llm_input)}
             ]
+
+            logger.info(f"LLM input: {messages}")
 
             response = ai_model.generate_response(
                 messages=messages,

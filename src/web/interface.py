@@ -26,12 +26,13 @@ def create_interface():
         method: str,
         llm_temperature: float,
         model: str,
-        use_pydf2: bool
+        use_pydf2: bool,
+        site_filter: str
     ):
         return chat_handler.process_chat(
             message, history, only_web_search, num_results, max_chars,
             time_range, language, category, engines, safesearch,
-            method, llm_temperature, model, use_pydf2
+            method, llm_temperature, model, use_pydf2, site_filter
         )
 
     iface = gr.ChatInterface(
