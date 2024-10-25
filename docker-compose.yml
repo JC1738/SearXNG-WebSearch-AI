@@ -9,3 +9,6 @@ services:
       - .env
     environment:
       - SEARXNG_KEY=${SEARXNG_KEY:-http://localhost:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
