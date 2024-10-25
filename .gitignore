@@ -10,6 +10,10 @@
 *.dylib
 __pycache__
 
+# virtual environment
+search/
+search_3_10/
+
 # Test binary, build with `go test -c`
 *.test
 

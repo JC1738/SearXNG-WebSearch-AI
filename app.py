@@ -28,6 +28,8 @@ from src.web.interface import create_interface
 from src.config.settings import (
     CUSTOM_LLM,
     CUSTOM_LLM_DEFAULT_MODEL,
+    GROQ_API_KEY,
+    MISTRAL_API_KEY,
     SEARXNG_URL,
     CURRENT_YEAR
 )
@@ -73,14 +75,10 @@ client = InferenceClient(
     token=HF_TOKEN,
 )
 
-# Default API key for examples (replace with a dummy value or leave empty)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
 # Initialize Groq client
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 # Initialize Mistral client
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 mistral_client = Mistral(api_key=MISTRAL_API_KEY)
 
 

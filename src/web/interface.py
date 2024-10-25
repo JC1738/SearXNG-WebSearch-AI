@@ -61,12 +61,8 @@ def create_interface():
             gr.Textbox(label="Site Filter (e.g. wikipedia.org)", value=""),
         ],
         additional_inputs_accordion=gr.Accordion("⚙️ Advanced Parameters", open=True),
-        retry_btn="Retry",
-        undo_btn="Undo",
-        clear_btn="Clear",
         chatbot=gr.Chatbot(
             show_copy_button=True,
-            likeable=True,
             layout="bubble",
             height=500,
         )

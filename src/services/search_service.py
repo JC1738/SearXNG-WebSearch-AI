@@ -37,8 +37,11 @@ class SearchService:
         if engines is None:
             engines = ['google']
 
+        query = f"{f'site:{site_filter} ' if site_filter.strip() else ''}{query}"
+        logger.info(f"Query: {query}")
+        
         params = {
-            'q': f"{f'site:{site_filter} ' if site_filter.strip() else ''}{query}",
+            'q': query,
             'format': 'json',
             'time_range': time_range,
             'language': language,
