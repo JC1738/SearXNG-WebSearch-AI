@@ -158,14 +158,14 @@ class SearchService:
                 # Assess relevance and summarize search results
                 assessed_results = []
                 for result in search_results:
-                    logger.debug(f"Assessing result: {result}")
+                    logger.info(f"Assessing result: {result}")
                     assessment = self.assessment_service.assess_relevance_and_summarize(ai_model, query, result, temperature=llm_temperature)
                     if "Relevant: Yes" in assessment:
                         # summary = assessment.split("Summary: ", 1)[1].strip()
                         # result['summary'] = summary
                         assessed_results.append(result)
 
-                logger.debug(f"Assessed results: {assessed_results}")
+                logger.info(f"Assessed results: {assessed_results}")
 
                 all_search_results.extend(assessed_results)
                 attempts += 1

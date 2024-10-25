@@ -2,13 +2,15 @@ import os
 from huggingface_hub import InferenceClient
 from groq import Groq
 from mistralai import Mistral
+from openai import OpenAI
 from ..config.settings import (
     HF_TOKEN,
     GROQ_API_KEY,
     MISTRAL_API_KEY,
     CUSTOM_LLM,
     fetch_custom_models,
-    CUSTOM_LLM_DEFAULT_MODEL
+    CUSTOM_LLM_DEFAULT_MODEL,
+    CUSTOM_LLM_KEY
 )
 
 def get_client_for_model(model: str):
@@ -20,6 +22,6 @@ def get_client_for_model(model: str):
     elif model == "mistral":
         return Mistral(api_key=MISTRAL_API_KEY)
     elif CUSTOM_LLM and (model in fetch_custom_models() or model == CUSTOM_LLM_DEFAULT_MODEL):
-        return None  # CustomModel doesn't need a client
+        return OpenAI(api_key=CUSTOM_LLM_KEY, base_url=CUSTOM_LLM)
     else:
         raise ValueError(f"Unsupported model: {model}")

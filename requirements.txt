@@ -19,3 +19,4 @@ groq
 faiss-cpu
 mistralai
 rank_bm25
+openai

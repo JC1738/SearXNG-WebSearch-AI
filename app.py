@@ -83,18 +83,6 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 mistral_client = Mistral(api_key=MISTRAL_API_KEY)
 
-# Commenting out unused functions
-# def determine_query_type(query: str, chat_history: str, ai_model: AIModel) -> str:
-#     ...
-
-# def rephrase_query(chat_history, query, temperature=0.2):
-#     ...
-
-# def extract_entity_domain(query):
-#     ...
-
-# def llm_summarize(json_input, model, temperature=0.2):
-#     ...
 
 from src.services.search_service import SearchService
 
